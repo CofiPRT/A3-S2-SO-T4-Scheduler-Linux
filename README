@@ -1,0 +1,194 @@
+------------ SISTEME DE OPERARE ------------
+---- TEMA 4 - Planificator de threaduri ----
+
+  ██████  ▒█████  
+▒██    ▒ ▒██▒  ██▒
+░ ▓██▄   ▒██░  ██▒
+  ▒   ██▒▒██   ██░
+▒██████▒▒░ ████▓▒░
+▒ ▒▓▒ ▒ ░░ ▒░▒░▒░ 
+░ ░▒  ░ ░  ░ ▒ ▒░ 
+░  ░  ░  ░ ░ ░ ▒  
+      ░      ░ ░  
+
+Cuprins:
+	1. Biblioteci si define-uri.........................Linia  40
+	2. Modularizare.....................................Linia  53
+		2.1. Tipul "thread".............................Linia  57
+			2.1.1. Functia "thread_init"................Linia  68
+			2.1.2. Functia "thread_routine".............Linia  77
+		2.2. Tipul "scheduler"..........................Linia  87
+			2.2.1. Functia "scheduler_init".............Linia  96
+			2.2.2. Functia "scheduler_terminate"........Linia 102
+			2.2.3. Functia "scheduler_push".............Linia 108
+			2.2.4. Functia "scheduler_pop"..............Linia 113
+			2.2.5. Functia "scheduler_register".........Linia 120
+			2.2.6. Functia "scheduler_run"..............Linia 126
+		2.3. Fisierul "so_scheduler.c"..................Linia 135
+			2.3.1. Functia "so_init"....................Linia 138
+			2.3.2. Functia "so_fork"....................Linia 146
+			2.3.3. Functia "so_wait"....................Linia 159
+			2.3.4. Functia "so_signal"..................Linia 168
+			2.3.5. Functia "so_exec"....................Linia 179
+			2.3.6. Functia "so_end".....................Linia 187
+	3. Alte detalii.....................................Linia 195
+
+=== =========================== ===
+=== 1. Biblioteci si define-uri ===
+=== =========================== ===
+
+Folosesc <semaphore.h> pe Linux pentru API-ul necesar lucrului cu semafoare,
+si <stdlib.h> pentru functii de gestionare a memoriei (malloc, free).
+
+Define-uri:
+	TRUE, FALSE - Pentru a simula valori boolene in cadrul codului
+	<FUNCTION>_SUCCESS, <FUNCTION>_FAILURE - Coduri de return pentru functii
+	THREAD_STATUS_* - Coduri de stare pentru un thread, conform cerintei
+
+
+=== =============== ===
+=== 2. Modularizare ===
+=== =============== ===
+
+--- ------------------- ---
+--- 2.1. Tipul "thread" ---
+--- ------------------- ---
+
+Un thread este definit de id-ul sau, si opereaza asupra unui semafor ce decide
+executia/intreruperea handler-ului aferent.
+
+Acesta poate astepta un eveniment IO (io), fi intr-o stare definita mai sus
+(status), are o prioritate (priority) si tine cont de timpul de executie ramas
+din cuanta sa.
+
+
+=== 2.1.1. Functia "thread_init" ===
+
+Se aloca memorie pentru un nou thread precum si un semafor pentru acesta, iar
+toate campurile se initializeaza la valori implicite sau primite ca parametru.
+
+Se intentioneaza ca tid-ul thread-ului sa fie setat din exterior, dupa un apel
+al acestei metode.
+
+
+=== 2.1.2. Functia "thread_routine" ===
+
+Aceasta functie este rulata la crearea unui thread propriu zis (de sistem, nu
+de tema).
+
+Se asteapta permisiune pentru a porni handler-ul, dupa care thread-ul (de tema)
+ajunge in stadiul TERMINATED si se ruleaza urmatorul thread disponibil.
+
+
+--- ---------------------- ---
+--- 2.2. Tipul "scheduler" ---
+--- ---------------------- ---
+
+Planificatorul poate fi pornit o singura data, simuland o instanta Singleton.
+
+Acesta tine cont de thread-ul curent, cele in asteptare (coada de asteptare),
+cuanta pe care fiecare thread o poate executa si numarul maxim de evenimente IO.
+
+
+=== 2.2.1. Functia "scheduler_init" ===
+
+Functia initializeaza planificatorul, alocandu-se memorie necesara pentru acesta
+si alte campuri din cadrul lui, avand valori implicite sau primite ca parametri.
+
+
+=== 2.2.2. Functia "scheduler_terminate" ===
+
+Funcia dezaloca toata memoria ocupata de acesta, precum si cea ocupata de
+thread-urile continute (sau terminate, create).
+
+
+=== 2.2.3. Functia "scheduler_push" ===
+
+Functia insereaza un thread in coada de asteptare, in functie de prioritate.
+
+
+=== 2.2.4. Functia "scheduler_pop" ===
+
+Functia scoate din coada de asteptare primul thread disponibil care nu este
+in starea WAITING. In alte cuvinte, primul thread care poate fi executat la
+nevoie.
+
+
+=== 2.2.5. Functia "scheduler_register" ===
+
+Functia salveaza un thread primit ca parametru, cu scopul de a-l gestiona la
+finalul planificarii (cand se executa "scheduler_terminate").
+
+
+=== 2.2.6. Functia "scheduler_run" ===
+
+Functia primeste un thread si il trece in starea RUNNING, eliberandu-i semaforul
+pentru a rula la nevoie.
+
+In cazul in care thread-ul este NULL, nu se produce nicio schimbare.
+
+
+--- ------------------------- ---
+--- Fisierul "so_scheduler.c" ---
+--- ------------------------- ---
+
+=== 2.3.1. Functia "so_init" ===
+
+Functia verifica argumentele primite si se foloseste de "scheduler_init" pentru
+a pregati planificatorul pentru rulare.
+
+Se returneaza succesul acestei operatii.
+
+
+=== 2.3.2. Functia "so_fork" ===
+
+Functia verifica argumentele primite si initializeaza un nou thread
+("thread_init", thread "de tema").
+
+Se porneste un thread (de sistem) ce va executa "thread_routine", punandu-se
+astfel in asteptare pana cand planificatorul ii permite sa ruleze.
+
+Daca exista deja un thread in executie, acesta nou creat este pus in coada de
+asteptare iar thread-ul curent consuma o cuanta de timp. In caz contrar,
+thread-ul nou creat isi incepe executia.
+
+
+=== 2.3.3. Functia "so_wait" ===
+
+Functia verifica argumentul primit si pune thread-ul curent in asteptare
+dupa un eveniment IO.
+
+Se ruleaza urmatorul thread disponibil iar cel curent este pus in coada de
+asteptare, fiind trezit doar de un "so_signal".
+
+
+=== 2.3.4. Functia "so_signal" ===
+
+Functia verifica argumentul primit si trezeste toate thread-urile in asteptare
+pe evenimentul IO. Acestea raman in lista de asteptare iar starea lor trece din
+WAITING in READY.
+
+Thread-ul curent este introdus in coada de asteptare, urmand sa se ruleze
+thread-ul disponibil cu cea mai mare prioritate. Exista posibilitatea ca
+thread-ul curent sa isi continue executia.
+
+
+=== 2.3.5. Functia "so_exec" ===
+
+Functia consuma o unitate de timp din cuanta thread-ului curent. In cazul in
+care aceasta a expirat, se reseteaza iar thread-ul curent este introdus in coada
+de asteptare, urmand sa se ruleaze thread-ul disponibil cu cea mai mare
+prioritate. Exista posibilitatea ca thread-ul curent sa isi continue executia.
+
+
+=== 2.3.6. Functia "so_end" ===
+
+Functia apeleaza join pe toate thread-urile create si se foloseste de
+"scheduler_terminate" pentru a elibera memoria consumata, astfel terminand
+executia planificatorului.
+
+
+=== =============== ===
+=== 3. Alte detalii ===
+=== =============== ===
+	Compilez cu -Wall si -Wextra.
